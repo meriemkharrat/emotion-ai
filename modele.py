@@ -1,9 +1,9 @@
 import streamlit as st
 import numpy as np
 import cv2
+import time
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-import time
 
 # ---------------- CONFIG ----------------
 MODEL_PATH = "best_model.keras"
@@ -19,10 +19,13 @@ EMOTION_LABELS = {
     6: "NEUTRAL"
 }
 
-# ---------------- PAGE ----------------
-st.set_page_config(page_title="AI Scan System", layout="wide")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(
+    page_title="AI Emotion Scan System",
+    layout="wide"
+)
 
-# ---------------- STYLE (TERMINAL) ----------------
+# ---------------- STYLE ----------------
 st.markdown("""
 <style>
 body {
@@ -43,31 +46,15 @@ body {
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- FOCAL LOSS ----------------
-def focal_loss(gamma=2., alpha=0.25):
-    def loss(y_true, y_pred):
-        y_true = tf.cast(y_true, tf.float32)
-        epsilon = 1e-7
-        y_pred = tf.clip_by_value(y_pred, epsilon, 1. - epsilon)
-
-        cross_entropy = -y_true * tf.math.log(y_pred)
-        weight = alpha * tf.pow(1 - y_pred, gamma)
-
-        loss = weight * cross_entropy
-        return tf.reduce_mean(tf.reduce_sum(loss, axis=1))
-    return loss
-
-# ---------------- LOAD MODEL ----------------
+# ---------------- MODEL LOADING (IMPORTANT FIX) ----------------
 @st.cache_resource
 def load_my_model():
-    return load_model(
-        MODEL_PATH,
-        custom_objects={"loss": focal_loss()}
-    )
+    model = load_model(MODEL_PATH)
+    return model
 
 model = load_my_model()
 
-# ---------------- PREPROCESS ----------------
+# ---------------- PREPROCESS IMAGE ----------------
 def preprocess_image(uploaded_file):
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_GRAYSCALE)
@@ -99,13 +86,16 @@ st.markdown("`>> Initialisation du module d’analyse faciale...`")
 st.divider()
 
 # ---------------- UPLOAD ----------------
-uploaded_file = st.file_uploader(">> Charger une image", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader(
+    ">> Charger une image",
+    type=["jpg", "jpeg", "png"]
+)
 
 if uploaded_file:
 
     processed, face_img = preprocess_image(uploaded_file)
 
-    col1, col2 = st.columns([1,1])
+    col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("`[INPUT IMAGE]`")
@@ -126,24 +116,23 @@ if uploaded_file:
 
             progress = st.progress(0)
 
-            # Simulation scan (effet stylé)
+            # Animation scan
             for i in range(100):
                 time.sleep(0.01)
                 progress.progress(i + 1)
 
             preds = model.predict(processed)
-            class_id = np.argmax(preds)
+            class_id = int(np.argmax(preds))
             confidence = float(np.max(preds))
 
             st.divider()
-
             st.markdown("### 📡 RAPPORT D’ANALYSE")
 
             st.code(f"""
 STATUS        : SUCCESS
 DETECTED      : {EMOTION_LABELS[class_id]}
 CONFIDENCE    : {confidence*100:.2f}%
-MODEL         : CNN Emotion v1
+MODEL         : CNN Emotion AI
 """)
 
             st.markdown("### 📊 DISTRIBUTION")
@@ -153,7 +142,7 @@ MODEL         : CNN Emotion v1
                 st.progress(float(prob))
 
     else:
-        st.error("Erreur traitement image")
+        st.error("Erreur de traitement de l'image")
 
 # ---------------- FOOTER ----------------
 st.divider()

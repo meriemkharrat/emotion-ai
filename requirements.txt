@@ -3,4 +3,3 @@ tensorflow==2.15.1
 numpy
 opencv-python-headless
 pandas
-libgl1
