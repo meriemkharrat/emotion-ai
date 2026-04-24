@@ -46,11 +46,15 @@ body {
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- MODEL LOADING (IMPORTANT FIX) ----------------
+# ---------------- MODEL LOADING (ROBUST) ----------------
 @st.cache_resource
 def load_my_model():
-    model = load_model(MODEL_PATH, compile=False)
-    return model
+    try:
+        model = load_model(MODEL_PATH, compile=False)
+        return model
+    except Exception as e:
+        st.error(f"Model loading failed: {e}")
+        return None
 
 model = load_my_model()
 
@@ -91,7 +95,7 @@ uploaded_file = st.file_uploader(
     type=["jpg", "jpeg", "png"]
 )
 
-if uploaded_file:
+if uploaded_file and model is not None:
 
     processed, face_img = preprocess_image(uploaded_file)
 
@@ -110,39 +114,36 @@ if uploaded_file:
 
     st.divider()
 
-    if processed is not None:
+    if processed is not None and st.button(">> LANCER ANALYSE"):
 
-        if st.button(">> LANCER ANALYSE"):
+        progress = st.progress(0)
 
-            progress = st.progress(0)
+        for i in range(100):
+            time.sleep(0.01)
+            progress.progress(i + 1)
 
-            # Animation scan
-            for i in range(100):
-                time.sleep(0.01)
-                progress.progress(i + 1)
+        preds = model.predict(processed, verbose=0)
+        class_id = int(np.argmax(preds))
+        confidence = float(np.max(preds))
 
-            preds = model.predict(processed)
-            class_id = int(np.argmax(preds))
-            confidence = float(np.max(preds))
+        st.divider()
+        st.markdown("### 📡 RAPPORT D’ANALYSE")
 
-            st.divider()
-            st.markdown("### 📡 RAPPORT D’ANALYSE")
-
-            st.code(f"""
+        st.code(f"""
 STATUS        : SUCCESS
 DETECTED      : {EMOTION_LABELS[class_id]}
 CONFIDENCE    : {confidence*100:.2f}%
 MODEL         : CNN Emotion AI
 """)
 
-            st.markdown("### 📊 DISTRIBUTION")
+        st.markdown("### 📊 DISTRIBUTION")
 
-            for i, prob in enumerate(preds[0]):
-                st.write(f"{EMOTION_LABELS[i]} : {prob:.3f}")
-                st.progress(float(prob))
+        for i, prob in enumerate(preds[0]):
+            st.write(f"{EMOTION_LABELS[i]} : {prob:.3f}")
+            st.progress(float(prob))
 
-    else:
-        st.error("Erreur de traitement de l'image")
+elif uploaded_file and model is None:
+    st.error("Model not loaded properly")
 
 # ---------------- FOOTER ----------------
 st.divider()
