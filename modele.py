@@ -49,7 +49,7 @@ body {
 # ---------------- MODEL LOADING (IMPORTANT FIX) ----------------
 @st.cache_resource
 def load_my_model():
-    model = load_model(MODEL_PATH)
+    model = load_model(MODEL_PATH, compile=False)
     return model
 
 model = load_my_model()
