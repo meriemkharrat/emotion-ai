@@ -1,22 +1,34 @@
 import streamlit as st
 import numpy as np
-import cv2
-import tensorflow as tf
-from tensorflow import keras
+
+# ---------------- SAFE IMPORTS (IMPORTANT) ----------------
+try:
+    import cv2
+except Exception:
+    cv2 = None
+    st.warning("OpenCV non disponible - certaines fonctions seront limitées.")
+
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+except Exception as e:
+    tf = None
+    keras = None
+    st.error("TensorFlow non disponible. Vérifie requirements.txt.")
 
 # ---------------- CONFIG ----------------
 MODEL_PATH = "best_model.keras"
 IMG_SIZE = (48, 48)
 
-EMOTION_LABELS = {
-    0: "ANGRY",
-    1: "DISGUST",
-    2: "FEAR",
-    3: "HAPPY",
-    4: "SAD",
-    5: "SURPRISE",
-    6: "NEUTRAL"
-}
+EMOTION_LABELS = [
+    "ANGRY",
+    "DISGUST",
+    "FEAR",
+    "HAPPY",
+    "SAD",
+    "SURPRISE",
+    "NEUTRAL"
+]
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -24,20 +36,32 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- MODEL LOADING (ROBUST VERSION) ----------------
+# ---------------- MODEL LOADING (ULTRA SAFE) ----------------
 @st.cache_resource
-def load_my_model():
+def load_model_safe():
+    if keras is None:
+        return None
+
     try:
-        model = keras.models.load_model(MODEL_PATH, compile=False)
+        model = keras.models.load_model(
+            MODEL_PATH,
+            compile=False,
+            safe_mode=False
+        )
         return model
+
     except Exception as e:
-        st.error("Model loading failed. Vérifie compatibilité TensorFlow/Keras.")
-        st.stop()
+        st.error("Model loading failed (compatibilité TensorFlow/Keras).")
+        st.code(str(e))
+        return None
 
-model = load_my_model()
+model = load_model_safe()
 
-# ---------------- IMAGE PREPROCESSING ----------------
+# ---------------- PREPROCESS ----------------
 def preprocess_image(uploaded_file):
+    if cv2 is None:
+        return None, None
+
     try:
         file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
         img = cv2.imdecode(file_bytes, cv2.IMREAD_GRAYSCALE)
@@ -51,7 +75,7 @@ def preprocess_image(uploaded_file):
 
         faces = face_cascade.detectMultiScale(img, 1.1, 5)
 
-        face_img = img.copy()
+        face_img = img
 
         if len(faces) > 0:
             x, y, w, h = faces[0]
@@ -62,17 +86,15 @@ def preprocess_image(uploaded_file):
 
         return face_img.reshape(1, 48, 48, 1), face_img
 
-    except Exception as e:
-        st.error("Erreur lors du traitement de l'image.")
+    except Exception:
         return None, None
 
-# ---------------- UI HEADER ----------------
+# ---------------- UI ----------------
 st.markdown("## 🧠 AI EMOTION SCAN SYSTEM")
-st.markdown("`>> Module facial actif`")
+st.markdown("System initialized | Safe mode active")
 st.divider()
 
-# ---------------- UPLOAD ----------------
-uploaded_file = st.file_uploader("Charger une image", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("Upload image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
 
@@ -81,45 +103,48 @@ if uploaded_file:
     col1, col2 = st.columns(2)
 
     with col1:
-        st.image(uploaded_file, caption="INPUT IMAGE", use_container_width=True)
+        st.image(uploaded_file, caption="INPUT", use_container_width=True)
 
     with col2:
         if face_img is not None:
-            st.image(face_img, caption="FACE EXTRACTED", use_container_width=True)
+            st.image(face_img, caption="FACE", use_container_width=True)
         else:
-            st.warning("Aucun visage détecté")
+            st.warning("No face detected or OpenCV unavailable")
 
     st.divider()
 
     # ---------------- PREDICTION ----------------
-    if processed is not None:
+    if st.button("RUN ANALYSIS"):
 
-        if st.button("LANCER ANALYSE"):
+        if model is None:
+            st.error("Model non chargé - vérifie TensorFlow/Keras versions")
+            st.stop()
 
-            with st.spinner("Analyse en cours..."):
-                preds = model.predict(processed)
-                class_id = int(np.argmax(preds))
-                confidence = float(np.max(preds))
+        if processed is None:
+            st.error("Image non exploitable")
+            st.stop()
 
-            st.success("Analyse terminée")
+        with st.spinner("Processing..."):
+            preds = model.predict(processed)
+            class_id = int(np.argmax(preds))
+            confidence = float(np.max(preds))
 
-            st.markdown("### 📡 RESULTAT")
+        st.success("Analysis complete")
 
-            st.code(f"""
-EMOTION      : {EMOTION_LABELS[class_id]}
-CONFIDENCE   : {confidence * 100:.2f}%
-MODEL        : CNN Emotion AI
+        st.markdown("### RESULT")
+
+        st.code(f"""
+EMOTION    : {EMOTION_LABELS[class_id]}
+CONFIDENCE : {confidence*100:.2f}%
+MODEL      : CNN Emotion AI
 """)
 
-            st.markdown("### 📊 PROBABILITÉS")
+        st.markdown("### PROBABILITIES")
 
-            for i, prob in enumerate(preds[0]):
-                st.write(f"{EMOTION_LABELS[i]} : {prob:.3f}")
-                st.progress(float(prob))
-
-    else:
-        st.error("Impossible de traiter l'image")
+        for i, p in enumerate(preds[0]):
+            st.write(f"{EMOTION_LABELS[i]} : {p:.3f}")
+            st.progress(float(p))
 
 # ---------------- FOOTER ----------------
 st.divider()
-st.markdown("System ready | AI module active")
+st.markdown("System stable | Safe execution mode enabled")
