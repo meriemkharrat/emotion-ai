@@ -2,8 +2,14 @@ import streamlit as st
 import numpy as np
 import cv2
 import time
-import tensorflow as tf
-from tensorflow.keras.models import load_model
+
+# ---------------- SAFE IMPORT KERAS ----------------
+try:
+    # Priorité TensorFlow (le plus stable en prod Streamlit)
+    from tensorflow.keras.models import load_model
+except Exception:
+    # fallback si environnement Keras standalone
+    from keras.models import load_model
 
 # ---------------- CONFIG ----------------
 MODEL_PATH = "best_model.keras"
@@ -20,10 +26,7 @@ EMOTION_LABELS = {
 }
 
 # ---------------- PAGE CONFIG ----------------
-st.set_page_config(
-    page_title="AI Emotion Scan System",
-    layout="wide"
-)
+st.set_page_config(page_title="AI Emotion Scan System", layout="wide")
 
 # ---------------- STYLE ----------------
 st.markdown("""
@@ -46,15 +49,15 @@ body {
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- MODEL LOADING (ROBUST) ----------------
+# ---------------- MODEL LOADING (FIXED) ----------------
 @st.cache_resource
 def load_my_model():
     try:
         model = load_model(MODEL_PATH, compile=False)
         return model
     except Exception as e:
-        st.error(f"Model loading failed: {e}")
-        return None
+        st.error("Model loading failed. Check TensorFlow/Keras compatibility.")
+        st.stop()
 
 model = load_my_model()
 
@@ -85,28 +88,24 @@ def preprocess_image(uploaded_file):
 
 # ---------------- HEADER ----------------
 st.markdown("## 🧠 AI EMOTION SCAN SYSTEM")
-st.markdown("`>> Initialisation du module d’analyse faciale...`")
-
+st.markdown("`>> Facial analysis module initialized`")
 st.divider()
 
 # ---------------- UPLOAD ----------------
-uploaded_file = st.file_uploader(
-    ">> Charger une image",
-    type=["jpg", "jpeg", "png"]
-)
+uploaded_file = st.file_uploader("Upload image", type=["jpg", "jpeg", "png"])
 
-if uploaded_file and model is not None:
+if uploaded_file:
 
     processed, face_img = preprocess_image(uploaded_file)
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("`[INPUT IMAGE]`")
+        st.markdown("Input Image")
         st.image(uploaded_file, use_container_width=True)
 
     with col2:
-        st.markdown("`[FACE EXTRACTION]`")
+        st.markdown("Face Detection")
         if face_img is not None:
             st.image(face_img, use_container_width=True)
         else:
@@ -114,7 +113,7 @@ if uploaded_file and model is not None:
 
     st.divider()
 
-    if processed is not None and st.button(">> LANCER ANALYSE"):
+    if processed is not None and st.button("Run Analysis"):
 
         progress = st.progress(0)
 
@@ -123,28 +122,29 @@ if uploaded_file and model is not None:
             progress.progress(i + 1)
 
         preds = model.predict(processed, verbose=0)
+
         class_id = int(np.argmax(preds))
         confidence = float(np.max(preds))
 
         st.divider()
-        st.markdown("### 📡 RAPPORT D’ANALYSE")
+        st.markdown("### Analysis Report")
 
         st.code(f"""
-STATUS        : SUCCESS
-DETECTED      : {EMOTION_LABELS[class_id]}
-CONFIDENCE    : {confidence*100:.2f}%
-MODEL         : CNN Emotion AI
+STATUS     : SUCCESS
+EMOTION    : {EMOTION_LABELS[class_id]}
+CONFIDENCE : {confidence*100:.2f}%
+MODEL      : CNN Emotion AI
 """)
 
-        st.markdown("### 📊 DISTRIBUTION")
+        st.markdown("### Probability Distribution")
 
         for i, prob in enumerate(preds[0]):
             st.write(f"{EMOTION_LABELS[i]} : {prob:.3f}")
             st.progress(float(prob))
 
-elif uploaded_file and model is None:
-    st.error("Model not loaded properly")
+    elif processed is None:
+        st.error("Image processing failed")
 
 # ---------------- FOOTER ----------------
 st.divider()
-st.markdown("`System ready | AI Module Active`")
+st.markdown("System ready | AI Module active")
